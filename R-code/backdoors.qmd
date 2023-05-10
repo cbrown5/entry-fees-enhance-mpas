@@ -1,0 +1,131 @@
+---
+title: "backdoors"
+format: docx
+editor: visual
+---
+
+## Backdoor criteria for the fish biomass model
+
+Here we use the backdoor criteria (ref - Pearl 2009) to address the potential causal effect of high fish biomass on the implementation of entry fees.
+
+```{r echo=FALSE}
+library(dagitty)
+library(ggdag)
+library(patchwork)
+```
+
+We proposed three models relating entry fees and fish biomass gain (Fig SXXX).
+
+For each model we determined the adjustment sets based on the backdoor criterion. The adjustment sets are the conditioning variables required to be included to prevent confounding in the test of entry fees on fish biomass gains.
+
+The causal models were plotted with the ggdag package (ref), the adjustment sets were determined with the daggity package (ref) in R.
+
+```{r echo=FALSE}
+fish_dag2 <- ggdag::dagify(Fee ~ FB + TI + mgmt, 
+                         TI ~ FB, 
+                         D ~ Fee + TI,
+                         D ~ NEOLI, 
+                         NEOLI ~ mgmt) 
+
+fish_dag1 <- ggdag::dagify(Fee ~ FB + TI, 
+                         TI ~ FB, 
+                         D ~ Fee + TI,
+                         D ~ NEOLI) 
+
+fish_dag0 <- ggdag::dagify(Fee ~TI, 
+                         D ~ Fee + TI,
+                         D ~ NEOLI) 
+
+```
+
+```{r}
+g0 <- ggdag(fish_dag0, text_size = 2,
+            node_size = 6) + 
+  theme_dag()
+g1 <- ggdag(fish_dag1, text_size = 2,
+            node_size = 6) + 
+  theme_dag()
+g2 <- ggdag(fish_dag2, text_size = 2,
+            node_size = 6) + 
+  theme_dag()
+
+g0 + g1 + g2 + plot_annotation(tag_levels = 'A') + 
+  plot_layout(ncol = 2, widths = c(1,1))
+```
+
+**Figure** Proposed causal models relating fees, fish biomass and gain in fish biomass. (A) Model with no effect of initial fish biomass (B) model with effect of initial fish biomass (C) model with unmeasured effect of good management on both fees and NEOLI. D: gain in fish biomass, Fee: presence of entry fee, TI: tourism intensity, FB: fish biomass, mgmt: unmeasured hypothesized management factors that lead to fees and NEOLI.
+
+```{r}
+paths(fish_dag0, from = "Fee",
+      to = "D")
+adjustmentSets(fish_dag0,
+  exposure = "Fee", 
+  outcome = "D")
+```
+
+```{r}
+paths(fish_dag1, from = "Fee",
+      to = "D")
+adjustmentSets(fish_dag1,
+  exposure = "Fee", 
+  outcome = "D")
+
+```
+
+```{r}
+paths(fish_dag2, from = "Fee",
+      to = "D")
+adjustmentSets(fish_dag2,
+  exposure = "Fee", 
+  outcome = "D")
+```
+
+The adjustment set for model one as the tourism intensity variable, for model two it was tourism intensity and NEOLI. We therefore included tourism intensity and NEOLI in our model for the test of an effect of entry fees on fish biomass gains.
+
+```{r}
+paths(fish_dag0, from = "TI",
+      to = "D")
+adjustmentSets(fish_dag0,
+  exposure = "TI", 
+  outcome = "D")
+```
+
+```{r}
+paths(fish_dag1, from = "TI",
+      to = "D")
+adjustmentSets(fish_dag1,
+  exposure = "TI", 
+  outcome = "D")
+```
+
+```{r}
+paths(fish_dag2, from = "TI",
+      to = "D")
+adjustmentSets(fish_dag2,
+  exposure = "TI", 
+  outcome = "D")
+```
+
+```{r}
+paths(fish_dag0, from = "NEOLI",
+      to = "D")
+adjustmentSets(fish_dag0,
+  exposure = "NEOLI", 
+  outcome = "D")
+```
+
+```{r}
+paths(fish_dag1, from = "NEOLI",
+      to = "D")
+adjustmentSets(fish_dag1,
+  exposure = "NEOLI", 
+  outcome = "D")
+```
+
+```{r}
+paths(fish_dag2, from = "NEOLI",
+      to = "D")
+adjustmentSets(fish_dag2,
+  exposure = "NEOLI", 
+  outcome = "D")
+```

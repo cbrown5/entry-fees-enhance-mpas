@@ -1,0 +1,340 @@
+---
+title: "METT SEM"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
+```
+
+## Summary 
+
+We analyzed causal models of the METT data. First we built a full model based on hypothesized causal relationships, then we tested the sufficiency of its fit and modified the model to get an adequate fit, finally we tested three nested sub-models against the full modified model. 
+
+
+```{r include = FALSE}
+
+library(tidyverse)
+library(corrplot)
+library(Hmisc)
+library(lavaan)
+library(dagitty)
+```
+
+
+```{r}
+dat <- read.csv("../METT/merged-mett.csv")
+
+datm <- as.matrix(dat[,c(26,3:25,27)])
+datm[datm>3] <- NA
+
+cors <- rcorr(datm,
+              type = "spearman")
+corsig <- cors$r 
+corsig[cors$P > 0.005] <- 0
+
+
+
+
+dat2 <- dat %>%
+  select(c("X14_Staff_Training",
+           "X12_Staff_Numbers",
+    "X15_Current_Budget",
+           "X16_Security_of_Budget",
+           "X20_Education_and_Awareness_Program",
+           "X17_Management_of_Budget",
+           "X23_Local_Communities",
+           "X24_Visitor_Facilities",
+           "X25_Commercial_Tourism",
+           "X26_Fees"))
+irm <- which(dat2>3, arr.ind = TRUE)
+dat3 <- dat2[-unique(irm[,1]),] %>%
+  mutate(across(starts_with("X"), ordered))
+dat3$X26_Fees <- as.numeric(as.character(dat3$X26_Fees))
+
+```
+
+## Correlations
+
+```{r fig.width=8, fig.height=8}
+corrplot(corsig, method = "circle",
+         tl.cex = 0.65,
+         tl.srt = 45,
+         diag = FALSE,
+         type = "lower",
+         order = "original")
+```
+
+**Figure S4** Spearman rank correlations among variables included in the METT database.
+
+**Table S2** METT variables used in the analysis 
+
+```{r}
+knitr::kable(matrix(names(dat2), ncol = 1))
+```
+
+
+# Model fitting 
+Note that in specifications below, variables starting with X are observed, variables in lower case are latent. 
+
+## Full model 
+
+Lavaan specification of the full model. 
+
+```{r echo = TRUE}
+model1 <- '
+  budget =~ X15_Current_Budget + X16_Security_of_Budget + X17_Management_of_Budget
+  budget ~ X26_Fees
+  X15_Current_Budget ~~ X16_Security_of_Budget
+  staff =~ X12_Staff_Numbers + X14_Staff_Training
+  staff ~~ budget
+  activities ~ budget + staff
+  activities =~ X24_Visitor_Facilities + X25_Commercial_Tourism + X20_Education_and_Awareness_Program + X23_Local_Communities 
+'
+```
+
+```{r}
+s1 <- sem(model1, dat3, std.lv = TRUE)
+```
+```{r, eval = FALSE}
+x <- lavaanToGraph(s1)
+coordinates(x) <- list(
+  x = c(budget = 0, engagement = 1, participation = 2,
+        X15_Current_Budget = -1,
+        X16_Security_of_Budget = -1,
+        X17_Management_of_Budget = -1,
+        X26_Fees = 0,
+        X14_Staff_Training = 0.5,
+        X12_Staff_Numbers = 1.5,
+        X20_Education_and_Awareness_Program = 1,
+        X24_Visitor_Facilities = 1,
+        X23_Local_Communities = 3,
+        X25_Commercial_Tourism = 3.3),
+  y = c(budget = 0, engagement = 0, participation = 0,
+        X15_Current_Budget = 1,
+        X16_Security_of_Budget = 0,
+        X17_Management_of_Budget = -1,
+        X26_Fees = 1,
+        X14_Staff_Training = -0.5,
+        X12_Staff_Numbers = -0.5,
+        X20_Education_and_Awareness_Program = 1,
+        X24_Visitor_Facilities = -1,
+        X23_Local_Communities = 1,
+        X25_Commercial_Tourism = 0)
+)
+par(cex = 0.5)
+plot(x,
+     abbreviate.names = FALSE,
+     show.coefficients = TRUE)
+
+```
+
+
+Chi-square statistic and p-value for model 1. 
+
+```{r}
+fitMeasures(s1, c("chisq","pvalue"))
+```
+Significant, indicating correlations in the data not explained by the model. 
+
+Look at modification indices. High values of 'mi' indicate important correlations. 
+
+```{r}
+x <- modindices(s1)[,1:5]
+x <- x[order(x$mi, decreasing = TRUE),]
+x[1:10,]
+```
+We will add the unexplained correlation between staff and fees first as it is the most plausible correlation with a high modification index.  
+
+### Model 1b 
+
+As for the full model but with fees affecting staff
+
+```{r echo = TRUE}
+model1b <- '
+  budget =~ X15_Current_Budget + X16_Security_of_Budget + X17_Management_of_Budget
+  budget ~ X26_Fees
+  X15_Current_Budget ~~ X16_Security_of_Budget
+  staff =~ X12_Staff_Numbers + X14_Staff_Training
+  staff ~ X26_Fees
+  staff ~~ budget
+  activities ~ budget + staff
+  activities =~ X24_Visitor_Facilities + X25_Commercial_Tourism + X20_Education_and_Awareness_Program + X23_Local_Communities 
+'
+```
+
+```{r}
+s1b <- sem(model1b, dat3, std.lv = TRUE)
+```
+```{r, eval = FALSE}
+x <- lavaanToGraph(s1b)
+
+par(cex = 0.5)
+plot(x,
+     abbreviate.names = FALSE,
+     show.coefficients = TRUE)
+
+```
+
+```{r}
+fitMeasures(s1b, c("chisq","pvalue"))
+```
+
+Significant, indicating correlations in the data not explained by the model. 
+
+Look at modification indices. High values of 'mi' indicate important correlations. 
+
+```{r}
+x <- modindices(s1b)[,1:5]
+x <- x[order(x$mi, decreasing = TRUE),]
+x[1:10,]
+```
+We will add the unexplained correlation between visitor facilities and commercial tourism as then next most plausible effect. 
+
+### Model 1c
+
+As for model 1b but with correlation between visitor facilities and commercial tourism. 
+
+```{r echo = TRUE}
+model1c <- '
+  budget =~ X15_Current_Budget + X16_Security_of_Budget + X17_Management_of_Budget
+  budget ~ X26_Fees
+  X15_Current_Budget ~~ X16_Security_of_Budget
+  staff =~ X12_Staff_Numbers + X14_Staff_Training
+  staff ~ X26_Fees
+  staff ~~ budget
+  activities ~ budget + staff
+  activities =~ X24_Visitor_Facilities + X25_Commercial_Tourism + X20_Education_and_Awareness_Program + X23_Local_Communities 
+  X24_Visitor_Facilities~~X25_Commercial_Tourism
+'
+```
+
+```{r}
+s1c <- sem(model1c, dat3, std.lv = TRUE)
+```
+```{r}
+x <- lavaanToGraph(s1c)
+
+par(cex = 0.5)
+plot(x,
+     abbreviate.names = FALSE,
+     show.coefficients = TRUE)
+
+```
+
+**Figure S5** The modified full model with path coefficients. 
+
+```{r}
+fitMeasures(s1c, c("chisq","pvalue"))
+```
+
+This model fits has p>0.05 indicating an acceptable fit. 
+
+Polychoric correlatoins
+```{r}
+lavCor(s1c, ordered = TRUE, group = NULL, output = "cor")
+```
+
+
+
+
+
+```{r, include=FALSE}
+### Save parameters
+ss1c <- summary(s1c)
+x <- ss1c$PE %>%
+  filter(!(lhs == rhs)) %>%
+  filter(!(op == "|")) %>%
+  filter(!(op == "~1")) %>%
+  mutate(est = signif(est, 3),
+         se = signif(se, 3),
+         z = signif(z, 3),
+         pvalue = round(pvalue,3)) %>%
+  select(LHS = lhs, RHS = rhs, `Path coefficient` = est, `S.E.` = se)
+# write.csv(x, "params-mod1c.csv", row.names = FALSE)
+```
+
+**Table S3** Path coefficients and their approximate standard errors for the final version of model 1. LHS: Term on the left-hand side of the equation, RHS: term on the right-hand side of the equation. Variables prepended with ‘X’ are observed variables, numbers refer to the relevant METT survey question.  
+
+## Predictions given entry fee input
+
+```{r}
+summary(s1c)
+```
+
+
+```{r}
+knitr::kable(x)
+```
+## Testing nested sub-models  
+ 
+
+### Staff capacity supports outreach activities 
+
+```{r echo = FALSE}
+model1c_3 <- '
+  budget =~ X15_Current_Budget + X16_Security_of_Budget + X17_Management_of_Budget
+  budget ~ X26_Fees
+  X15_Current_Budget ~~ X16_Security_of_Budget
+  staff =~ X12_Staff_Numbers + X14_Staff_Training
+  staff ~ X26_Fees
+  staff ~~ budget
+  activities ~ budget 
+  activities ~~ 0*staff
+  activities =~ X24_Visitor_Facilities + X25_Commercial_Tourism + X20_Education_and_Awareness_Program + X23_Local_Communities 
+  X24_Visitor_Facilities~~X25_Commercial_Tourism
+'
+s1c_3 <- sem(model1c_3, dat3, std.lv = TRUE)
+anova(s1c_3, s1c)
+```
+
+### Budget health supports outreach activities 
+
+```{r echo = FALSE}
+model1c_4 <- '
+  budget =~ X15_Current_Budget + X16_Security_of_Budget + X17_Management_of_Budget
+  budget ~ X26_Fees
+  X15_Current_Budget ~~ X16_Security_of_Budget
+  staff =~ X12_Staff_Numbers + X14_Staff_Training
+  staff ~ X26_Fees
+  staff ~~ budget
+  activities ~ staff
+  activities ~~ 0*budget
+  activities =~ X24_Visitor_Facilities + X25_Commercial_Tourism + X20_Education_and_Awareness_Program + X23_Local_Communities 
+  X24_Visitor_Facilities~~X25_Commercial_Tourism
+'
+s1c_4 <- sem(model1c_4, dat3, std.lv = TRUE)
+anova(s1c_4, s1c)
+
+```
+
+```{r}
+x <- lavaanToGraph(s1c_4)
+
+par(cex = 0.5)
+plot(x,
+     abbreviate.names = FALSE,
+     show.coefficients = TRUE)
+
+```  
+
+**Figure S6** The nested sub-model that lacks effect of budget health on outreach activities.  
+
+### Entry fees were a driver of budget health. 
+
+```{r echo = FALSE}
+model1c_5 <- '
+  budget =~ X15_Current_Budget + X16_Security_of_Budget + X17_Management_of_Budget
+  X15_Current_Budget ~~ X16_Security_of_Budget
+  staff =~ X12_Staff_Numbers + X14_Staff_Training
+  staff ~ X26_Fees
+  staff ~~ budget
+  activities ~ budget + staff
+  activities =~ X24_Visitor_Facilities + X25_Commercial_Tourism + X20_Education_and_Awareness_Program + X23_Local_Communities 
+  X24_Visitor_Facilities~~X25_Commercial_Tourism
+'
+s1c_5 <- sem(model1c_5, dat3, std.lv = TRUE)
+anova(s1c_5, s1c)
+```
